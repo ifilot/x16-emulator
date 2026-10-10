@@ -91,7 +91,6 @@ jobs:
           cp latest_rom/*.h src/.
       - name: Build Emulator
         run: |
-          git diff
           mkdir build
           cd build
           cmake .. -DENABLE_FLUIDSYNTH=ON -DENABLE_TRACE=ON
@@ -99,29 +98,7 @@ jobs:
       - name: Package Emulator
         run: |
           mkdir emu_binaries
-          cp $(which SDL2.dll) emu_binaries/.
-          cp $(which zlib1.dll) emu_binaries/.
-          cp $(which libwinpthread-1.dll) emu_binaries/.
-          cp $(which libfluidsynth-3.dll) emu_binaries/.
-          cp $(which libgcc_s_seh-1.dll) emu_binaries/.
-          cp $(which libglib-2.0-0.dll) emu_binaries/.
-          cp $(which libgmodule-2.0-0.dll) emu_binaries/.
-          cp $(which libportaudio.dll) emu_binaries/.
-          cp $(which libintl-8.dll) emu_binaries/.
-          cp $(which libstdc++-6.dll) emu_binaries/.
-          cp $(which libgomp-1.dll) emu_binaries/.
-          cp $(which libreadline8.dll) emu_binaries/.
-          cp $(which libsndfile-1.dll) emu_binaries/.
-          cp $(which libpcre2-8-0.dll) emu_binaries/.
-          cp $(which libiconv-2.dll) emu_binaries/.
-          cp $(which libtermcap-0.dll) emu_binaries/.
-          cp $(which libFLAC.dll) emu_binaries/.
-          cp $(which libmp3lame-0.dll) emu_binaries/.
-          cp $(which libmpg123-0.dll) emu_binaries/.
-          cp $(which libogg-0.dll) emu_binaries/.
-          cp $(which libopus-0.dll) emu_binaries/.
-          cp $(which libvorbis-0.dll) emu_binaries/.
-          cp $(which libvorbisenc-2.dll) emu_binaries/.
+          cmake -DMINGW_BIN="$(cygpath -m "$MINGW_PREFIX/bin")" -P .gh/package-windows.cmake
           cp sdcard.img.zip emu_binaries/.
           cp build/x16emu.exe emu_binaries/.
           cp build/makecart.exe emu_binaries/.
@@ -168,7 +145,6 @@ jobs:
           cp latest_rom/*.h src/.
       - name: Build Emulator
         run: |
-          git diff
           mkdir build
           cd build
           cmake .. -DENABLE_FLUIDSYNTH=ON -DENABLE_TRACE=ON
@@ -176,29 +152,7 @@ jobs:
       - name: Package Emulator
         run: |
           mkdir emu_binaries
-          cp $(which SDL2.dll) emu_binaries/.
-          cp $(which zlib1.dll) emu_binaries/.
-          cp $(which libwinpthread-1.dll) emu_binaries/.
-          cp $(which libfluidsynth-3.dll) emu_binaries/.
-          cp $(which libgcc_s_seh-1.dll) emu_binaries/.
-          cp $(which libglib-2.0-0.dll) emu_binaries/.
-          cp $(which libgmodule-2.0-0.dll) emu_binaries/.
-          cp $(which libportaudio.dll) emu_binaries/.
-          cp $(which libintl-8.dll) emu_binaries/.
-          cp $(which libstdc++-6.dll) emu_binaries/.
-          cp $(which libgomp-1.dll) emu_binaries/.
-          cp $(which libreadline8.dll) emu_binaries/.
-          cp $(which libsndfile-1.dll) emu_binaries/.
-          cp $(which libpcre2-8-0.dll) emu_binaries/.
-          cp $(which libiconv-2.dll) emu_binaries/.
-          cp $(which libtermcap-0.dll) emu_binaries/.
-          cp $(which libFLAC.dll) emu_binaries/.
-          cp $(which libmp3lame-0.dll) emu_binaries/.
-          cp $(which libmpg123-0.dll) emu_binaries/.
-          cp $(which libogg-0.dll) emu_binaries/.
-          cp $(which libopus-0.dll) emu_binaries/.
-          cp $(which libvorbis-0.dll) emu_binaries/.
-          cp $(which libvorbisenc-2.dll) emu_binaries/.
+          cmake -DMINGW_BIN="$(cygpath -m "$MINGW_PREFIX/bin")" -P .gh/package-windows.cmake
           cp sdcard.img.zip emu_binaries/.
           cp build/x16emu.exe emu_binaries/.
           cp build/makecart.exe emu_binaries/.
@@ -242,7 +196,6 @@ jobs:
           cp latest_rom/*.h src/.
       - name: Build Emulator
         run: |
-          git diff
           mkdir build
           cd build
           cmake .. -DENABLE_FLUIDSYNTH=ON -DENABLE_TRACE=ON
@@ -292,7 +245,7 @@ jobs:
       - name: Build Emulator
         uses: pguyot/arm-runner-action@v2
         with:
-          base_image: raspios_lite_arm64:2022-04-04
+          base_image: raspi_3_bookworm:20231109
           image_additional_mb: 8192
           cpu: cortex-a53
           copy_artifact_path: emu_binaries
@@ -348,7 +301,7 @@ jobs:
       - name: Build Emulator
         uses: pguyot/arm-runner-action@v2
         with:
-          base_image: raspios_lite:2022-04-04
+          base_image: raspi_2_bookworm:20231109
           image_additional_mb: 8192
           cpu: cortex-a7
           copy_artifact_path: emu_binaries

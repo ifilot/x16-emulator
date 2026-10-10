@@ -26,6 +26,7 @@
 #include <stdbool.h>
 #include <limits.h>
 #include <stdint.h>
+#include "agent.h"
 #include <time.h>
 
 #ifdef __EMSCRIPTEN__
@@ -300,7 +301,7 @@ video_reset()
 
 	// fill video RAM with random data
 	for (int i = 0; i < 128 * 1024; i++) {
-		video_ram[i] = rand();
+		video_ram[i] = agent_mode ? 0 : rand();
 	}
 
 	sprite_line_collisions = 0;
@@ -557,13 +558,9 @@ struct video_sprite_properties
 };
 
 #ifndef __EMSCRIPTEN__
-static void
-screenshot(void)
+bool
+video_capture_png(const char *path)
 {
-	char path[PATH_MAX];
-	const time_t now = time(NULL);
-	strftime(path, PATH_MAX, "x16emu-%Y-%m-%d-%H-%M-%S.png", localtime(&now));
-
 	memset(png_buffer, 0, SCREEN_WIDTH * SCREEN_HEIGHT * 3);
 
 	// The framebuffer stores pixels in BRGA but we want RGB:
@@ -573,12 +570,23 @@ screenshot(void)
 		png_buffer[(i*3)+2] = framebuffer[(i*4)+0];
 	}
 
-	if (stbi_write_png(path, SCREEN_WIDTH, SCREEN_HEIGHT, 3, png_buffer, SCREEN_WIDTH*3)) {
+	return stbi_write_png(path, SCREEN_WIDTH, SCREEN_HEIGHT, 3, png_buffer, SCREEN_WIDTH*3) != 0;
+}
+
+static void
+screenshot(void)
+{
+	char path[PATH_MAX];
+	const time_t now = time(NULL);
+	strftime(path, PATH_MAX, "x16emu-%Y-%m-%d-%H-%M-%S.png", localtime(&now));
+	if (video_capture_png(path)) {
 		printf("Wrote screenshot to %s\n", path);
 	} else {
 		printf("WARNING: Couldn't write screenshot to %s\n", path);
 	}
 }
+#else
+bool video_capture_png(const char *path) { (void)path; return false; }
 #endif
 
 struct video_sprite_properties sprite_properties[128];
@@ -1128,9 +1136,9 @@ render_line(uint16_t y, float scan_pos_x)
 		render_sprite_line(eff_y);
 	}
 
-	if (warp_mode && (frame_count & 63)) {
+	if ((agent_mode && !agent_render_video()) || (!agent_mode && warp_mode && (frame_count & 63))) {
 		// sprites were needed for the collision IRQ, but we can skip
-		// everything else if we're in warp mode, most of the time
+		// pixel composition outside agent capture or on skipped warp frames.
 		return;
 	}
 
@@ -2418,7 +2426,9 @@ bool video_is_special_address(int addr)
 
 void
 stop6502(uint16_t address, uint8_t bank) {
-	if (debugger_enabled) {
+	if (agent_mode) {
+		agent_stop("stp");
+	} else if (debugger_enabled) {
 		DEBUGBreakToDebugger();
 	} else if (testbench) {
 		printf("STP\n");

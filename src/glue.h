@@ -24,7 +24,7 @@
 #define ROM_SIZE (NUM_ROM_BANKS * 16384)    /* banks at $C000-$FFFF */
 #define CART_SIZE (NUM_CART_BANKS * 16384)  /* expansion banks at $C000-$FFFF */
 
-#define WINDOW_TITLE "Commander X16"
+#define WINDOW_TITLE "X16 AgentBridge"
 
 #ifdef __APPLE__
 #define MOUSE_GRAB_MSG " (\xE2\x87\xA7\xE2\x8C\x98M to end mouse/keyboard capture)"

@@ -24,6 +24,7 @@ void i2c_step();
 void i2c_kbd_buffer_add(uint8_t value);
 uint8_t i2c_kbd_buffer_next();
 void i2c_kbd_buffer_flush();
+uint8_t i2c_kbd_buffer_count(void);
 
 void i2c_mse_buffer_add(uint8_t value);
 uint8_t i2c_mse_buffer_next();
@@ -39,5 +40,6 @@ void mouse_send_state(void);
 void mouse_set_wheel(int8_t y);
 uint8_t mouse_get_device_id();
 void mouse_set_device_id(uint8_t d);
+void mouse_reset(void);
 
 #endif

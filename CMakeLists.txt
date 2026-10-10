@@ -10,6 +10,14 @@ project(x16emu LANGUAGES C CXX)
 
 # --- Options (Replacements for Env Vars) ---
 option(ENABLE_LTO "Enable Link Time Optimization" ON)
+option(ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+if(ENABLE_SANITIZERS)
+    if(EMSCRIPTEN OR MSVC)
+        message(FATAL_ERROR "ENABLE_SANITIZERS requires a native GCC/Clang toolchain")
+    endif()
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+endif()
 
 # --- Configuration & Standards ---
 set(CMAKE_C_STANDARD 11)
@@ -196,6 +204,8 @@ set(X16_SOURCES
     src/timing.c
     src/wav_recorder.c
     src/testbench.c
+    src/agent.c
+    src/agent_json.c
     src/files.c
     src/cartridge.c
     src/iso_8859_15.c
@@ -356,3 +366,20 @@ message(STATUS "================================================================
 message(STATUS "   Fluidsynth Support : ${FLUID_EN_MSG}")
 message(STATUS "   Trace Support      : ${TRACE_EN_MSG}")
 message(STATUS "=========================================================================\n")
+
+include(CTest)
+if(BUILD_TESTING AND NOT EMSCRIPTEN)
+    add_executable(agent_json_test tests/agent_json_test.c src/agent_json.c)
+    target_include_directories(agent_json_test PRIVATE src)
+    add_test(NAME agent_json COMMAND agent_json_test)
+    add_executable(agent_input_test tests/input_test.c src/i2c.c src/keyboard.c)
+    target_include_directories(agent_input_test PRIVATE src)
+    target_link_libraries(agent_input_test PRIVATE SDL2::SDL2)
+    if(TARGET SDL2::SDL2main)
+        target_link_libraries(agent_input_test PRIVATE SDL2::SDL2main)
+    endif()
+    add_test(NAME agent_input COMMAND agent_input_test)
+    add_test(NAME agent_api COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_agent.py $<TARGET_FILE:x16emu>)
+    set_tests_properties(agent_api PROPERTIES TIMEOUT 90)
+endif()

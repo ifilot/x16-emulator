@@ -1,0 +1,29 @@
+name: X16 AgentBridge tests
+on: [push, pull_request]
+
+jobs:
+  agent-tests:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        mode: [release, sanitizers]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libsdl2-dev zlib1g-dev python3
+      - name: Configure
+        run: |
+          if [ "${{ matrix.mode }}" = sanitizers ]; then
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DENABLE_LTO=OFF -DENABLE_SANITIZERS=ON -DENABLE_FLUIDSYNTH=OFF -DENABLE_TRACE=OFF
+          else
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_FLUIDSYNTH=OFF -DENABLE_TRACE=OFF
+          fi
+      - name: Build
+        run: cmake --build build --parallel 4
+      - name: Test without desktop or audio
+        env:
+          SDL_VIDEODRIVER: invalid-agent-test-driver
+          SDL_AUDIODRIVER: invalid-agent-test-driver
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+        run: ctest --test-dir build --output-on-failure

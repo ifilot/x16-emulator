@@ -38,6 +38,7 @@ void i2c_reset_state() {
 	smc_requested_reset = false;
 	i2c_mse_buffer_flush();
 	i2c_kbd_buffer_flush();
+	mouse_reset();
 }
 
 static void
@@ -200,6 +201,10 @@ i2c_step()
 uint8_t kbd_head=0;
 uint8_t kbd_tail=0;
 
+uint8_t i2c_kbd_buffer_count(void) {
+	return (KBD_SIZE + kbd_head - kbd_tail) & (KBD_SIZE - 1);
+}
+
 /**
  * Adds value to the keyboard ring buffer; the value is discarded if the buffer is full
  **/
@@ -284,6 +289,13 @@ static int16_t mouse_diff_y = 0;
 static int8_t wheel = 0;
 static uint8_t mouse_device_id = 3;
 
+void mouse_reset(void) {
+	buttons = 0;
+	mouse_diff_x = mouse_diff_y = 0;
+	wheel = 0;
+	mouse_device_id = 3;
+}
+
 // byte 0, bit 7: Y overflow
 // byte 0, bit 6: X overflow
 // byte 0, bit 5: Y sign bit
@@ -333,12 +345,12 @@ mouse_send_state(void)
 		int send_diff_x = mouse_diff_x > 255 ? 255 : (mouse_diff_x < -256 ? -256 : mouse_diff_x);
 		int send_diff_y = mouse_diff_y > 255 ? 255 : (mouse_diff_y < -256 ? -256 : mouse_diff_y);
 
-		mouse_send(send_diff_x, send_diff_y, buttons, wheel);
+		if (!mouse_send(send_diff_x, send_diff_y, buttons, wheel)) return;
 
 		mouse_diff_x -= send_diff_x;
 		mouse_diff_y -= send_diff_y;
 		wheel = 0;
-	} while (mouse_diff_x != 0 && mouse_diff_y != 0);
+	} while (mouse_diff_x != 0 || mouse_diff_y != 0);
 }
 
 void

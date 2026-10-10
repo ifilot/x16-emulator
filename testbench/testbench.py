@@ -53,8 +53,13 @@ class X16TestBench:
         r = ""
         while r.startswith("RDY")==False:
             r = self.__readline()
+            if not r:
+                signal.alarm(0)
+                raise Exception("Emulator disconnected")
             if r.startswith("ERR"):
+                signal.alarm(0)
                 raise Exception(r[3:].strip())
+        signal.alarm(0)
 
     def __writeline(self, str):
         self.emu.stdin.write((str + "\n").encode('utf-8'))

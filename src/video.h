@@ -17,6 +17,7 @@ bool video_step(float mhz, float steps, bool midline);
 bool video_update(void);
 void video_end(void);
 bool video_get_irq_out(void);
+bool video_capture_png(const char *path);
 void video_save(SDL_RWops *f);
 uint8_t video_read(uint8_t reg, bool debugOn);
 void video_write(uint8_t reg, uint8_t value);

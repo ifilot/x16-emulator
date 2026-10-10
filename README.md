@@ -1,3 +1,28 @@
+# X16 AgentBridge
+
+**A fork of the [Commander X16 emulator](https://github.com/X16Community/x16-emulator)
+for AI-assisted application development and automated testing.**
+
+AgentBridge adds a native, windowless JSON API with bounded execution, register
+and memory inspection, breakpoints, keyboard/mouse injection, PRG loading, and
+fresh PNG capture. VERA timing and sound-device emulation remain active without
+a window, browser Canvas, or host audio playback. The normal frontend remains
+available, and the executable is still named `x16emu`.
+
+See the [API guide](docs/agent-api.md) and [Python client](api/python/x16agent.py).
+Upstream release badges below refer to the canonical emulator, not this fork.
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel 4
+ctest --test-dir build --output-on-failure
+./build/x16emu -agent -rom /path/to/rom.bin -fsroot /path/to/runtime
+```
+
+The ROM is supplied separately; compilation does not create `rom.bin`.
+
+---
+
 <p align="center">
   <img src="./.gh/logo.png" />
 </p>

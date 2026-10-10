@@ -7,3 +7,4 @@ src/x16edit_E_labels.h
 .vscode/
 .idea/
 /build
+__pycache__/

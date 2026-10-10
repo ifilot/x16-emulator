@@ -10,6 +10,7 @@
 
 void audio_init(const char *dev_name, int num_audio_buffers);
 void audio_close(void);
+void audio_init_headless(void);
 void audio_step(int cpu_clocks);
 void audio_render();
 

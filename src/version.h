@@ -4,4 +4,4 @@
 
 #define VER "50"
 #define VER_NAME "next"
-#define VER_INFO "### Release 50 (\"next\")"
+#define VER_INFO "X16 AgentBridge (fork of Commander X16 Emulator r50, \"next\")"

@@ -11,6 +11,12 @@ class ym2151_interface : public ymfm::ymfm_interface {
 			m_irq_status{ false }
 		{ }
 		~ym2151_interface() { }
+		void reset() {
+			m_chip.reset();
+			m_timers[0] = m_timers[1] = 0;
+			m_busy_timer = 0;
+			m_irq_status = false;
+		}
 
 		virtual void ymfm_sync_mode_write(uint8_t data) override {
 			m_engine->engine_mode_write(data);
@@ -106,6 +112,7 @@ extern "C" {
 		// args are ignored
 		initialized = true;
 	}
+	void YM_reset(void) { opm_iface.reset(); }
 
 	void YM_stream_update(uint16_t* output, uint32_t numsamples) {
 		if (initialized) opm_iface.generate((int16_t*)output, numsamples);

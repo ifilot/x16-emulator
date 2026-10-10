@@ -10,6 +10,7 @@
 #include "smc.h"
 #include "glue.h"
 #include "i2c.h"
+#include "agent.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -133,6 +134,7 @@ smc_write() {
 	switch (i2c_data[0]) {
 		case 1:
 			if (i2c_data[1] == 0) {
+				if (agent_mode) { agent_stop("poweroff"); break; }
 				printf("SMC Power Off.\n");
 				main_shutdown();
 #ifdef __EMSCRIPTEN__

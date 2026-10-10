@@ -87,7 +87,7 @@ void testbench_init()
                 if (ival == -1) {
                     invalid();
                 } else {
-                    memory_set_ram_bank((uint8_t)ival);
+                    write6502(0, 0, (uint8_t)ival);
                     ready();
                 }
             }
@@ -102,7 +102,7 @@ void testbench_init()
                 if (ival == -1) {
                     invalid();
                 } else {
-                    memory_set_rom_bank((uint8_t)ival);
+                    write6502(1, 0, (uint8_t)ival);
                     ready();
                 }
             }
@@ -282,7 +282,7 @@ void testbench_init()
         }
 
         else if(strncmp(line, "RSP", 3) == 0) {             //Request stack pointer value
-            printf("%lx\n", (long)regs.sp);
+            printf("%lx\n", (long)(regs.sp & 0xff));
             fflush(stdout);
         }
 

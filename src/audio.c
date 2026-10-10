@@ -66,6 +66,7 @@ static const int16_t filter[512] = {
 };
 
 static SDL_AudioDeviceID audio_dev;
+static bool silent_emulation;
 static int16_t * buffer;
 static uint32_t buffer_size = 0;
 static uint32_t rdidx = 0;
@@ -226,11 +227,25 @@ audio_close(void)
 	}
 }
 
+// Advance chips without a host device, resampler, callback, or output ring buffer.
+// Device state (including PCM FIFO and YM timers) still follows emulated time.
+void audio_init_headless(void)
+{
+	silent_emulation = true;
+	YM_Create(3579545);
+	YM_init(3579545/64, 60);
+	vera_samp_pos_rd = vera_samp_pos_wr = vera_samp_pos_hd = 0;
+	YM_reset();
+	ym_samp_pos_rd = ym_samp_pos_wr = ym_samp_pos_hd = 0;
+	fs_samp_pos_rd = fs_samp_pos_wr = fs_samp_pos_hd = 0;
+	host_sample_rate = AUDIO_SAMPLERATE;
+}
+
 void
 audio_step(int cpu_clocks)
 {
 	// Accumulate how many samples each source have to render
-	if (audio_dev == 0) {
+	if (audio_dev == 0 && !silent_emulation) {
 		return;
 	}
 
@@ -252,7 +267,7 @@ audio_render()
 	// Render all audio sources until read and write positions catch up
 	// This happens when there's a change to sound registers or one of the
 	// sources' sample buffer head position is too far
-	if (audio_dev == 0) {
+	if (audio_dev == 0 && !silent_emulation) {
 		return;
 	}
 
@@ -294,6 +309,13 @@ audio_render()
 	}
 	if (len > 0) {
 		midi_synth_render(&fs_buf[pos * 2], len);
+	}
+
+	if (silent_emulation) {
+		vera_samp_pos_rd = vera_samp_pos_hd;
+		ym_samp_pos_rd = ym_samp_pos_hd;
+		fs_samp_pos_rd = fs_samp_pos_hd;
+		return;
 	}
 
 	uint32_t wridx_old = wridx;

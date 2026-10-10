@@ -41,6 +41,7 @@
 #include "version.h"
 #include "wav_recorder.h"
 #include "testbench.h"
+#include "agent.h"
 #include "cartridge.h"
 #include "midi.h"
 #include "git_rev.h"
@@ -340,6 +341,7 @@ machine_reset()
 	mouse_state_init();
 	reset6502(regs.is65c816);
 	midi_serial_init();
+	if (agent_mode) audio_init_headless();
 }
 
 void
@@ -386,7 +388,7 @@ is_kernal()
 static void
 usage()
 {
-	printf("\nCommander X16 Emulator r%s (%s)", VER, VER_NAME);
+	printf("\nX16 AgentBridge (Commander X16 Emulator fork) r%s (%s)", VER, VER_NAME);
 #ifdef GIT_REV
 	printf(", "GIT_REV);
 #endif
@@ -516,6 +518,8 @@ usage()
 	printf("\tInstall the second VIA chip expansion at $9F10\n");
 	printf("-testbench\n");
 	printf("\tHeadless mode for unit testing with an external test runner\n");
+	printf("-agent\n");
+	printf("\tPaused, windowless JSON API over stdin/stdout; diagnostics on stderr.\n");
 	printf("-mhz <integer>\n");
 	printf("\tRun the emulator with a system clock speed other than the default of\n");
 	printf("\t8 MHz. Valid values are in the range of 1-40, inclusive. This option\n");
@@ -599,6 +603,13 @@ void no_fluidsynth_warning(void)
 int
 main(int argc, char **argv)
 {
+	for (int i = 1; i < argc; ++i) {
+		if (!strcmp(argv[i], "-agent")) agent_mode = true;
+	}
+	if (agent_mode && !agent_open()) {
+		fprintf(stderr, "Cannot open AgentBridge protocol output.\n");
+		return 1;
+	}
 	char *rom_filename = "rom.bin";
 	char rom_path_data[PATH_MAX];
 
@@ -624,6 +635,7 @@ main(int argc, char **argv)
 	// no ROM file is specified on the command line.
 	memcpy(rom_path, base_path, strlen(base_path) + 1);
 	strncpy(rom_path + strlen(rom_path), rom_filename, PATH_MAX - strlen(rom_path));
+	SDL_free(base_path);
 	memory_randomize_ram(true);
 
 	argc--;
@@ -1098,6 +1110,9 @@ main(int argc, char **argv)
 			argc--;
 			argv++;
 			exit(0);
+		} else if (!strcmp(argv[0], "-agent")) {
+			argc--; argv++;
+			headless = true;
 		} else if (!strcmp(argv[0], "-testbench")){
 			printf("Testbench mode...\n");
 			fflush(stdout);
@@ -1150,6 +1165,15 @@ main(int argc, char **argv)
 		}
 	}
 
+	if (agent_mode) {
+		if (testbench || debugger_enabled || record_gif != RECORD_GIF_DISABLED || wav_path) {
+			fprintf(stderr, "-agent cannot be combined with -testbench, -debug, -gif, or -wav.\n");
+			return 1;
+		}
+		memory_randomize_ram(false);
+		warp_mode = false;
+		warp_pastes = false;
+	}
 	if (is_gen2) {
 		num_banks = NUM_MAX_BANKS;
 		num_ram_banks = NUM_MAX_RAM_BANKS;
@@ -1270,13 +1294,18 @@ main(int argc, char **argv)
 		}
 		audio_init(audio_dev_name, audio_buffers);
 		video_init(window_scale, screen_x_scale, scale_quality, fullscreen, window_opacity);
+	} else if (agent_mode) {
+		if (SDL_Init(SDL_INIT_TIMER) < 0) {
+			fprintf(stderr, "SDL timer initialization failed: %s\n", SDL_GetError());
+			return 1;
+		}
 	}
 
 	wav_recorder_set_path(wav_path);
 
 	memory_init();
 
-	joystick_init();
+	if (!agent_mode) joystick_init();
 
 	rtc_init(set_system_time);
 
@@ -1303,6 +1332,10 @@ void main_shutdown() {
 		wav_recorder_shutdown();
 		audio_close();
 		video_end();
+		SDL_Quit();
+	}
+	if (agent_mode) {
+		agent_close();
 		SDL_Quit();
 	}
 	if(cartridge_path) {
@@ -1585,13 +1618,14 @@ emulator_loop(void *param)
 {
 	uint32_t old_clockticks6502 = clockticks6502;
 	for (;;) {
+		if (agent_mode && !agent_before_step(&old_clockticks6502)) break;
 		if (smc_requested_reset) machine_reset();
 
 		if (testbench && regs.pc == 0xfffd){
 			testbench_init();
 		}
 
-		if (debugger_enabled) {
+		if (debugger_enabled && !agent_mode) {
 			int dbgCmd = DEBUGGetCurrentStatus();
 			if (dbgCmd > 0) continue;
 			if (dbgCmd < 0) break;
@@ -1708,11 +1742,13 @@ emulator_loop(void *param)
 #endif
 
 		if (handle_ieee_intercept()) {
+			if (agent_mode) agent_after_step(false, false);
 			continue;
 		}
 
 		instruction_counter += waiting ^ 0x1;
 
+		bool executed_instruction = !waiting;
 		step6502();
 		uint32_t clocks = clockticks6502 - old_clockticks6502;
 		old_clockticks6502 = clockticks6502;
@@ -1725,7 +1761,7 @@ emulator_loop(void *param)
 		if (has_via2) {
 			via2_step(clocks);
 		}
-		if (!headless) {
+		if (!headless || agent_mode) {
 			new_frame |= video_step(MHZ, clocks, false);
 		}
 
@@ -1734,13 +1770,14 @@ emulator_loop(void *param)
 		}
 		rtc_step(clocks);
 
-		if (!headless) {
+		if (!headless || agent_mode) {
 			audio_step(clocks);
 		}
+		if (agent_mode && new_frame) audio_render();
 
 		midi_serial_step(clocks);
 
-		if (!headless && new_frame) {
+		if ((!headless || agent_mode) && new_frame) {
 			if (nvram_dirty && nvram_path) {
 				SDL_RWops *f = SDL_RWFromFile(nvram_path, "wb");
 				if (f) {
@@ -1750,11 +1787,10 @@ emulator_loop(void *param)
 				nvram_dirty = false;
 			}
 
-			if (!video_update()) {
-				break;
+			if (!agent_mode) {
+				if (!video_update()) break;
+				timing_update();
 			}
-
-			timing_update();
 #ifdef __EMSCRIPTEN__
 			// After completing a frame we yield back control to the browser to stay responsive
 			return 0;
@@ -1773,7 +1809,7 @@ emulator_loop(void *param)
 			irq6502();
 		}
 
-		if (regs.pc == 0xffff) {
+		if (regs.pc == 0xffff && !agent_mode) {
 			if (save_on_exit) {
 				machine_dump("CPU program counter reached $ffff");
 			}
@@ -1883,6 +1919,10 @@ emulator_loop(void *param)
 					clipboard_buffer = NULL;
 				}
 			}
+		}
+		if (agent_mode) {
+			if (regs.pc == 0xffff) agent_stop("exit");
+			agent_after_step(new_frame, executed_instruction);
 		}
 	}
 

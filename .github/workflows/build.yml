@@ -2,6 +2,31 @@ name: Build Binaries
 on: [push, pull_request]
 
 jobs:
+  ROM:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Fetch ROM and symbols
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/r') }}
+        run: |
+          artifact="ROM Image"
+          if [ "$RELEASE_BUILD" = true ]; then
+            artifact="Release ROM Image"
+          fi
+          if ! gh run download -R X16Community/x16-rom -n "$artifact" --dir latest_rom; then
+            # Actions artifacts expire; release assets remain available.
+            gh release download -R X16Community/x16-rom --pattern '*.ROM.Image.zip' --dir rom_release
+            mkdir -p latest_rom
+            unzip -o 'rom_release/*.zip' -d latest_rom
+          fi
+          test -s latest_rom/rom.bin
+          test -s latest_rom/rom_lst.h
+          test -s latest_rom/rom_labels.h
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rom-image
+          path: latest_rom/*
   README:
     runs-on: ubuntu-22.04
     steps:
@@ -28,8 +53,21 @@ jobs:
         with:
           name: readme-pdf
           path: artifacts/*
+      - uses: actions/checkout@v4
+        with:
+          repository: X16Community/x16-docs
+          path: x16-docs
+      - name: Create Programmer's Reference Guide
+        working-directory: x16-docs
+        run: |
+          mkdir artifacts
+          cat .gh/header_footer.md "Commander X16 Programmer's Reference Guide.md" "X16 Reference - "*.md | ../node_modules/.bin/md-to-pdf --config-file .gh/config.js --stylesheet .gh/markdown.css > "artifacts/Commander X16 Programmer's Reference Guide.pdf"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x16-docs-pdf
+          path: x16-docs/artifacts/*
   build-win-x86_64:
-    needs: [README]
+    needs: [README, ROM]
     runs-on: windows-2022
     defaults:
       run:
@@ -40,30 +78,19 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-          install: make git mingw-w64-x86_64-toolchain mingw-w64-x86_64-libelf mingw-w64-x86_64-SDL2 mingw-w64-x86_64-fluidsynth mingw-w64-x86_64-cmake
+          install: make git mingw-w64-x86_64-toolchain mingw-w64-x86_64-SDL2 mingw-w64-x86_64-fluidsynth mingw-w64-x86_64-cmake
       - uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-      - name: Fetch latest ROM
-        if: startsWith(github.ref, 'refs/tags/r') != true
-        run: |
-          gh run download -R X16Community/x16-rom -n "ROM Image" --dir latest_rom
-        shell: cmd
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Fetch latest release ROM
-        if: startsWith(github.ref, 'refs/tags/r')
-        run: |
-          gh run download -R X16Community/x16-rom -n "Release ROM Image" --dir latest_rom
-        shell: cmd
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: rom-image
+          path: latest_rom
       - name: Copy ROM symbols
         run: |
           cp latest_rom/*.h src/.
       - name: Build Emulator
         run: |
-          git reset --hard
           git diff
           mkdir build
           cd build
@@ -107,17 +134,16 @@ jobs:
         with:
           name: readme-pdf
           path: emu_binaries
-      - name: Fetch x16-docs PDFs
-        run: gh run download -R X16Community/x16-docs -n x16-docs-pdf --dir emu_binaries
-        shell: cmd
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: x16-docs-pdf
+          path: emu_binaries
       - uses: actions/upload-artifact@v4
         with:
           name: x16emu_win64
           path: emu_binaries/*
   build-win-i686:
-    needs: [README]
+    needs: [README, ROM]
     runs-on: windows-2022
     defaults:
       run:
@@ -128,31 +154,20 @@ jobs:
         with:
           msystem: MINGW32
           update: true
-          install: make git mingw-w64-i686-toolchain mingw-w64-i686-libelf mingw-w64-i686-SDL2 mingw-w64-i686-fluidsynth mingw-w64-i686-cmake
+          install: make git mingw-w64-i686-toolchain mingw-w64-i686-SDL2 mingw-w64-i686-fluidsynth mingw-w64-i686-cmake
           path-type: inherit
       - uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-      - name: Fetch latest ROM
-        if: startsWith(github.ref, 'refs/tags/r') != true
-        run: |
-          gh run download -R X16Community/x16-rom -n "ROM Image" --dir latest_rom
-        shell: cmd
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Fetch latest release ROM
-        if: startsWith(github.ref, 'refs/tags/r')
-        run: |
-          gh run download -R X16Community/x16-rom -n "Release ROM Image" --dir latest_rom
-        shell: cmd
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: rom-image
+          path: latest_rom
       - name: Copy ROM symbols
         run: |
           cp latest_rom/*.h src/.
       - name: Build Emulator
         run: |
-          git reset --hard
           git diff
           mkdir build
           cd build
@@ -196,16 +211,16 @@ jobs:
         with:
           name: readme-pdf
           path: emu_binaries
-      - name: Fetch x16-docs PDFs
-        run: gh run download -R X16Community/x16-docs -n x16-docs-pdf --dir emu_binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: x16-docs-pdf
+          path: emu_binaries
       - uses: actions/upload-artifact@v4
         with:
           name: x16emu_win32
           path: emu_binaries/*
   build-linux-x86_64:
-    needs: [README]
+    needs: [README, ROM]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -218,24 +233,15 @@ jobs:
           sudo sed -Ei 's/^# deb-src /deb-src /' /etc/apt/sources.list
           sudo apt-get update
           sudo apt-get install -y build-essential make libsdl2-dev libfluidsynth-dev cmake
-      - name: Fetch latest ROM
-        if: startsWith(github.ref, 'refs/tags/r') != true
-        run: |
-          gh run download -R X16Community/x16-rom -n "ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Fetch latest release ROM
-        if: startsWith(github.ref, 'refs/tags/r')
-        run: |
-          gh run download -R X16Community/x16-rom -n "Release ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: rom-image
+          path: latest_rom
       - name: Copy ROM symbols
         run: |
           cp latest_rom/*.h src/.
       - name: Build Emulator
         run: |
-          git reset --hard
           git diff
           mkdir build
           cd build
@@ -256,16 +262,16 @@ jobs:
         with:
           name: readme-pdf
           path: emu_binaries
-      - name: Fetch x16-docs PDFs
-        run: gh run download -R X16Community/x16-docs -n x16-docs-pdf --dir emu_binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: x16-docs-pdf
+          path: emu_binaries
       - uses: actions/upload-artifact@v4
         with:
           name: x16emu_linux-x86_64
           path: emu_binaries/*
   build-linux-aarch64:
-    needs: [README]
+    needs: [README, ROM]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -276,18 +282,10 @@ jobs:
         run: |
           sudo apt-get update 
           sudo apt-get install -y build-essential make qemu-user-static
-      - name: Fetch latest ROM
-        if: startsWith(github.ref, 'refs/tags/r') != true
-        run: |
-          gh run download -R X16Community/x16-rom -n "ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Fetch latest release ROM
-        if: startsWith(github.ref, 'refs/tags/r')
-        run: |
-          gh run download -R X16Community/x16-rom -n "Release ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: rom-image
+          path: latest_rom
       - name: Copy ROM symbols
         run: |
           cp latest_rom/*.h src/.
@@ -303,7 +301,6 @@ jobs:
             apt-get install -y build-essential make libsdl2-dev file git libfluidsynth-dev cmake
             mkdir build
             cd build
-            git reset --hard
             cmake .. -DENABLE_FLUIDSYNTH=ON -DENABLE_TRACE=ON
             cmake --build .
             cd ..
@@ -321,16 +318,16 @@ jobs:
         with:
           name: readme-pdf
           path: emu_binaries
-      - name: Fetch x16-docs PDFs
-        run: gh run download -R X16Community/x16-docs -n x16-docs-pdf --dir emu_binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: x16-docs-pdf
+          path: emu_binaries
       - uses: actions/upload-artifact@v4
         with:
           name: x16emu_linux-aarch64
           path: emu_binaries/*
   build-linux-armhf:
-    needs: [README]
+    needs: [README, ROM]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -341,18 +338,10 @@ jobs:
         run: |
           sudo apt-get update 
           sudo apt-get install -y build-essential make qemu-user-static
-      - name: Fetch latest ROM
-        if: startsWith(github.ref, 'refs/tags/r') != true
-        run: |
-          gh run download -R X16Community/x16-rom -n "ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Fetch latest release ROM
-        if: startsWith(github.ref, 'refs/tags/r')
-        run: |
-          gh run download -R X16Community/x16-rom -n "Release ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: rom-image
+          path: latest_rom
       - name: Copy ROM symbols
         run: |
           cp latest_rom/*.h src/.
@@ -368,7 +357,6 @@ jobs:
             apt-get install -y build-essential make libsdl2-dev file git libfluidsynth-dev cmake
             mkdir build
             cd build
-            git reset --hard
             cmake .. -DENABLE_FLUIDSYNTH=ON -DENABLE_TRACE=ON
             cmake --build .
             cd ..
@@ -386,16 +374,16 @@ jobs:
         with:
           name: readme-pdf
           path: emu_binaries
-      - name: Fetch x16-docs PDFs
-        run: gh run download -R X16Community/x16-docs -n x16-docs-pdf --dir emu_binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: x16-docs-pdf
+          path: emu_binaries
       - uses: actions/upload-artifact@v4
         with:
           name: x16emu_linux-armhf
           path: emu_binaries/*
   build-macos-x86_64:
-    needs: [README]
+    needs: [README, ROM]
     # this is currently macos-15, Sequoia
     runs-on: macos-15-intel
     steps:
@@ -406,18 +394,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-      - name: Fetch latest ROM
-        if: startsWith(github.ref, 'refs/tags/r') != true
-        run: |
-          gh run download -R X16Community/x16-rom -n "ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Fetch latest release ROM
-        if: startsWith(github.ref, 'refs/tags/r')
-        run: |
-          gh run download -R X16Community/x16-rom -n "Release ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: rom-image
+          path: latest_rom
       - name: Copy ROM symbols
         run: |
           cp latest_rom/*.h src/.
@@ -442,16 +422,16 @@ jobs:
         with:
           name: readme-pdf
           path: emu_binaries
-      - name: Fetch x16-docs PDFs
-        run: gh run download -R X16Community/x16-docs -n x16-docs-pdf --dir emu_binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: x16-docs-pdf
+          path: emu_binaries
       - uses: actions/upload-artifact@v4
         with:
           name: x16emu_macos_intel
           path: emu_binaries/*
   build-macos-arm64:
-    needs: [README]
+    needs: [README, ROM]
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -461,18 +441,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Fetch latest ROM
-        if: startsWith(github.ref, 'refs/tags/r') != true
-        run: |
-          gh run download -R X16Community/x16-rom -n "ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Fetch latest release ROM
-        if: startsWith(github.ref, 'refs/tags/r')
-        run: |
-          gh run download -R X16Community/x16-rom -n "Release ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: rom-image
+          path: latest_rom
       - name: Copy ROM symbols
         run: |
           cp latest_rom/*.h src/.
@@ -497,15 +469,16 @@ jobs:
         with:
           name: readme-pdf
           path: emu_binaries
-      - name: Fetch x16-docs PDFs
-        run: gh run download -R X16Community/x16-docs -n x16-docs-pdf --dir emu_binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: x16-docs-pdf
+          path: emu_binaries
       - uses: actions/upload-artifact@v4
         with:
           name: x16emu_macos_m1
           path: emu_binaries/*
   build-wasm:
+    needs: [ROM]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -515,18 +488,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-      - name: Fetch latest ROM
-        if: startsWith(github.ref, 'refs/tags/r') != true
-        run: |
-          gh run download -R X16Community/x16-rom -n "ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Fetch latest release ROM
-        if: startsWith(github.ref, 'refs/tags/r')
-        run: |
-          gh run download -R X16Community/x16-rom -n "Release ROM Image" --dir latest_rom
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: rom-image
+          path: latest_rom
       - name: Copy ROM symbols
         run: |
           cp latest_rom/*.h src/.
